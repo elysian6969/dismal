@@ -35,17 +35,49 @@ pub enum Reg {
 }
 
 impl Reg {
-    /// Attempt to parse a register.
+    /// Create a register from bits.
     #[inline]
-    pub const fn try_parse(reg: u8) -> Option<Self> {
-        let is_lo = reg & HI_BIT != 0;
-        let reg = reg & REG_MASK;
+    pub const fn from_bits(mut bits: u8) -> Option<Self> {
+        let is_lo = bits & HI_BIT != 0;
+
+        bits &= REG_MASK;
 
         if is_lo {
-            from_lo(reg)
+            from_lo(bits)
         } else {
-            from_hi(reg)
+            from_hi(bits)
         }
+    }
+
+    /// Create a register from bits, assuming lo.
+    #[inline]
+    pub const fn from_lo(mut bits: u8) -> Option<Self> {
+        bits &= REG_MASK;
+
+        from_lo(bits)
+    }
+
+    /// Create a register from bits, assuming hi.
+    #[inline]
+    pub const fn from_hi(mut bits: u8) -> Option<Self> {
+        bits &= REG_MASK;
+
+        from_hi(bits)
+    }
+
+    #[inline]
+    pub const unsafe fn from_bits_unchecked(bits: u8) -> Self {
+        Self::from_bits(bits).unwrap_unchecked()
+    }
+
+    #[inline]
+    pub const unsafe fn from_lo_unchecked(bits: u8) -> Self {
+        Self::from_lo(bits).unwrap_unchecked()
+    }
+
+    #[inline]
+    pub const unsafe fn from_hi_unchecked(bits: u8) -> Self {
+        Self::from_hi(bits).unwrap_unchecked()
     }
 
     #[inline]

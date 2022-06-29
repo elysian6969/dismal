@@ -1,5 +1,6 @@
 #![feature(const_convert)]
 #![feature(const_mut_refs)]
+#![feature(const_option_ext)]
 #![feature(const_trait_impl)]
 #![feature(const_try)]
 
@@ -24,16 +25,6 @@ pub enum Inst {
 
 const REX_W: u8 = 0x48;
 
-#[inline]
-const fn try_parse_pop_one(byte: u8) -> Option<Reg> {
-    Reg::try_parse(byte)
-}
-
-#[inline]
-const fn try_parse_pop_two(byte: u8) -> Option<Reg> {
-    Reg::try_parse(byte & !0b1000)
-}
-
 impl Inst {
     #[inline]
     pub const fn from_bytes(bytes: &[u8]) -> Option<Inst> {
@@ -52,21 +43,31 @@ impl Inst {
                 Inst::Lea(Reg::Rcx, Arg::Int(i32::from_le_bytes([*a, *b, *c, *d])))
             }
             [0xFF, 0x15, a, b, c, d, ..] => Inst::Call(i32::from_le_bytes([*a, *b, *c, *d])),
+
             // push
-            [0x50, ..] => Inst::Push(Arg::Reg(Reg::Rax)),
             [0x6A, byte] => Inst::Push(Arg::Int(*byte as i32)),
 
             // syscall
             [0x0F, 0x05, ..] => Inst::Syscall,
 
-            // pop two
-            [0x41, reg, ..] => Inst::Pop(try_parse_pop_two(*reg)?),
+            // push reg <= r7
+            [0x41, reg @ 0x50..=0x57, ..] => {
+                Inst::Push(Arg::Reg(unsafe { Reg::from_hi_unchecked(*reg) }))
+            }
+
+            // pop reg <= r7
+            [0x41, reg @ 0x58..=0x5F, ..] => Inst::Pop(unsafe { Reg::from_hi_unchecked(*reg) }),
 
             // ret
             [0xC3, ..] => Inst::Ret,
 
-            // maybe pop one
-            [unk, ..] => Inst::Pop(try_parse_pop_one(*unk)?),
+            // push reg <= r7
+            [reg @ 0x50..=0x57, ..] => {
+                Inst::Push(Arg::Reg(unsafe { Reg::from_lo_unchecked(*reg) }))
+            }
+
+            // pop reg <= r7
+            [reg @ 0x58..=0x5F, ..] => Inst::Pop(unsafe { Reg::from_lo_unchecked(*reg) }),
 
             _ => return None,
         };
@@ -95,8 +96,12 @@ impl Inst {
                         bytes.push_unchecked(0x58 | reg.bits());
                     }
                 }
-                Inst::Push(Arg::Reg(Reg::Rax)) => {
-                    bytes.push_unchecked(0x50);
+                Inst::Push(Arg::Reg(reg)) => {
+                    if reg.is_hi() {
+                        bytes.extend_from_slice_unchecked(&[0x41, 0x50 | reg.base_bits()]);
+                    } else {
+                        bytes.push_unchecked(0x50 | reg.bits());
+                    }
                 }
                 Inst::Ret => {
                     bytes.push_unchecked(0xC3);
