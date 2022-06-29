@@ -18,6 +18,7 @@ pub enum Inst {
     Lea(Reg, Arg),
     Pop(Reg),
     Push(Arg),
+    Jmp(i32),
     Ret,
     Syscall,
     Xor(Reg, Reg),
@@ -39,9 +40,16 @@ impl Inst {
             [REX_W, 0xC7, 0xC0, a, b, c, d, ..] => {}
             // lea rip rsi
             [REX_W, 0x8D, 0x35, a, b, c, d, ..] => {}*/
+
+            // lea
             [REX_W, 0x8D, 0x0D, a, b, c, d, ..] => {
                 Inst::Lea(Reg::Rcx, Arg::Int(i32::from_le_bytes([*a, *b, *c, *d])))
             }
+
+            // jmp
+            [0xFF, 0x25, a, b, c, d, ..] => Inst::Jmp(i32::from_le_bytes([*a, *b, *c, *d])),
+
+            // call
             [0xFF, 0x15, a, b, c, d, ..] => Inst::Call(i32::from_le_bytes([*a, *b, *c, *d])),
 
             // push
@@ -89,6 +97,10 @@ impl Inst {
                     bytes.extend_from_slice_unchecked(&[REX_W, 0x8D, 0x0D]);
                     bytes.extend_from_slice_unchecked(&rel.to_le_bytes());
                 }
+                Inst::Jmp(rel) => {
+                    bytes.extend_from_slice_unchecked(&[0xFF, 0x25]);
+                    bytes.extend_from_slice_unchecked(&rel.to_le_bytes());
+                }
                 Inst::Pop(reg) => {
                     if reg.is_hi() {
                         bytes.extend_from_slice_unchecked(&[0x41, 0x58 | reg.base_bits()]);
@@ -122,6 +134,7 @@ impl Inst {
         match self {
             Inst::Call(_) => 6,
             Inst::Lea(_, _) => 7,
+            Inst::Jmp(_) => 6,
             Inst::Pop(reg) => {
                 if reg.is_hi() {
                     2
