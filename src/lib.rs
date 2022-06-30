@@ -17,6 +17,7 @@ pub enum Inst {
     Call(i32),
     Call2(i32),
     Lea(Reg, Arg),
+    Mov(Reg, Arg),
     Pop(Reg),
     Push(Arg),
     Jmp(i32),
@@ -41,6 +42,11 @@ impl Inst {
             [REX_W, 0xC7, 0xC0, a, b, c, d, ..] => {}
             // lea rip rsi
             [REX_W, 0x8D, 0x35, a, b, c, d, ..] => {}*/
+
+            // mov rax, qword ptr [rip+rel]
+            [REX_W, 0x8B, 0x05, a, b, c, d, ..] => {
+                Inst::Mov(Reg::Rax, Arg::Int(i32::from_le_bytes([*a, *b, *c, *d])))
+            }
 
             // lea
             [REX_W, 0x8D, 0x0D, a, b, c, d, ..] => {
@@ -109,6 +115,10 @@ impl Inst {
                     bytes.extend_from_slice_unchecked(&[0xFF, 0x25]);
                     bytes.extend_from_slice_unchecked(&rel.to_le_bytes());
                 }
+                Inst::Mov(Reg::Rax, Arg::Int(rel)) => {
+                    bytes.extend_from_slice_unchecked(&[REX_W, 0x8B, 0x05]);
+                    bytes.extend_from_slice_unchecked(&rel.to_le_bytes());
+                }
                 Inst::Pop(reg) => {
                     if reg.is_hi() {
                         bytes.extend_from_slice_unchecked(&[0x41, 0x58 | reg.base_bits()]);
@@ -140,7 +150,10 @@ impl Inst {
     #[inline]
     pub const fn rel_addr(&self) -> Option<isize> {
         let rel = match self {
-            Inst::Call(rel) | Inst::Call2(rel) | Inst::Jmp(rel) => rel,
+            Inst::Call(rel)
+            | Inst::Call2(rel)
+            | Inst::Jmp(rel)
+            | Inst::Mov(Reg::Rax, Arg::Int(rel)) => rel,
             _ => return None,
         };
 
@@ -154,6 +167,7 @@ impl Inst {
             Inst::Call2(_) => 6,
             Inst::Lea(_, _) => 7,
             Inst::Jmp(_) => 6,
+            Inst::Mov(_, _) => 7,
             Inst::Pop(reg) => {
                 if reg.is_hi() {
                     2
