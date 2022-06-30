@@ -15,6 +15,7 @@ mod reg;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Inst {
     Call(i32),
+    Call2(i32),
     Lea(Reg, Arg),
     Pop(Reg),
     Push(Arg),
@@ -50,7 +51,10 @@ impl Inst {
             [0xFF, 0x25, a, b, c, d, ..] => Inst::Jmp(i32::from_le_bytes([*a, *b, *c, *d])),
 
             // call
-            [0xFF, 0x15, a, b, c, d, ..] => Inst::Call(i32::from_le_bytes([*a, *b, *c, *d])),
+            [0xFF, 0x15, a, b, c, d, ..] => Inst::Call2(i32::from_le_bytes([*a, *b, *c, *d])),
+
+            // call
+            [0xE8, a, b, c, d, ..] => Inst::Call(i32::from_le_bytes([*a, *b, *c, *d])),
 
             // push
             [0x6A, byte] => Inst::Push(Arg::Int(*byte as i32)),
@@ -90,6 +94,10 @@ impl Inst {
         unsafe {
             match self {
                 Inst::Call(rel) => {
+                    bytes.push_unchecked(0xE8);
+                    bytes.extend_from_slice_unchecked(&rel.to_le_bytes());
+                }
+                Inst::Call2(rel) => {
                     bytes.extend_from_slice_unchecked(&[0xFF, 0x15]);
                     bytes.extend_from_slice_unchecked(&rel.to_le_bytes());
                 }
@@ -132,7 +140,7 @@ impl Inst {
     #[inline]
     pub const fn rel_addr(&self) -> Option<isize> {
         let rel = match self {
-            Inst::Call(rel) | Inst::Jmp(rel) => rel,
+            Inst::Call(rel) | Inst::Call2(rel) | Inst::Jmp(rel) => rel,
             _ => return None,
         };
 
@@ -142,7 +150,8 @@ impl Inst {
     #[inline]
     pub const fn len(&self) -> usize {
         match self {
-            Inst::Call(_) => 6,
+            Inst::Call(_) => 5,
+            Inst::Call2(_) => 6,
             Inst::Lea(_, _) => 7,
             Inst::Jmp(_) => 6,
             Inst::Pop(reg) => {
