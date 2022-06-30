@@ -175,6 +175,7 @@ pub struct WithIp {
 }
 
 impl WithIp {
+    /// Construct a new instruction with an associated instruction pointer.
     #[inline]
     pub const fn new(ip: usize, inst: Inst) -> Self {
         Self { ip, inst }
@@ -184,17 +185,27 @@ impl WithIp {
     #[inline]
     pub const fn abs_addr(self) -> Option<usize> {
         // relative addresses are calculated from the ip after the current instruction.
-        let ip = self.ip + self.inst.len();
+        let ip = self.next_ip();
         let addr = ip as isize + self.inst.rel_addr()?;
 
         Some(addr as usize)
     }
 
+    /// Returns the current instruction pointer.
     #[inline]
     pub const fn ip(self) -> usize {
         self.ip
     }
 
+    /// Returns the next instruction pointer.
+    ///
+    /// Equivalent to `withip.ip() + withip.len()`.
+    #[inline]
+    pub const fn next_ip(self) -> usize {
+        self.ip + self.inst.len()
+    }
+
+    /// Fancy formatter, not implemented yet.
     #[inline]
     pub const fn display(self) -> Inst {
         self.inst
