@@ -5,10 +5,12 @@
 #![feature(const_try)]
 
 use core::ops;
+use encoder::Encoder;
 use pancake::Vec;
 
 pub use reg::Reg;
 
+mod encoder;
 mod reg;
 
 /// An instruction.
@@ -95,55 +97,55 @@ impl Inst {
 
     #[inline]
     pub const fn to_bytes(&self) -> Vec<u8, 15> {
-        let mut bytes = Vec::new();
+        let mut encoder = Encoder::new();
 
         unsafe {
-            match self {
+            match *self {
                 Inst::Call(rel) => {
-                    bytes.push_unchecked(0xE8);
-                    bytes.extend_from_slice_unchecked(&rel.to_le_bytes());
+                    encoder.write_u8(0xE8);
+                    encoder.write_i32(rel);
                 }
                 Inst::Call2(rel) => {
-                    bytes.extend_from_slice_unchecked(&[0xFF, 0x15]);
-                    bytes.extend_from_slice_unchecked(&rel.to_le_bytes());
+                    encoder.write_bytes(&[0xFF, 0x15]);
+                    encoder.write_i32(rel);
                 }
                 Inst::Lea(Reg::Rcx, Arg::Int(rel)) => {
-                    bytes.extend_from_slice_unchecked(&[REX_W, 0x8D, 0x0D]);
-                    bytes.extend_from_slice_unchecked(&rel.to_le_bytes());
+                    encoder.write_bytes(&[REX_W, 0x8D, 0x0D]);
+                    encoder.write_i32(rel);
                 }
                 Inst::Jmp(rel) => {
-                    bytes.extend_from_slice_unchecked(&[0xFF, 0x25]);
-                    bytes.extend_from_slice_unchecked(&rel.to_le_bytes());
+                    encoder.write_bytes(&[0xFF, 0x25]);
+                    encoder.write_i32(rel);
                 }
                 Inst::Mov(Reg::Rax, Arg::Int(rel)) => {
-                    bytes.extend_from_slice_unchecked(&[REX_W, 0x8B, 0x05]);
-                    bytes.extend_from_slice_unchecked(&rel.to_le_bytes());
+                    encoder.write_bytes(&[REX_W, 0x8B, 0x05]);
+                    encoder.write_i32(rel);
                 }
                 Inst::Pop(reg) => {
                     if reg.is_hi() {
-                        bytes.extend_from_slice_unchecked(&[0x41, 0x58 | reg.base_bits()]);
+                        encoder.write_bytes(&[0x41, 0x58 | reg.base_bits()]);
                     } else {
-                        bytes.push_unchecked(0x58 | reg.bits());
+                        encoder.write_u8(0x58 | reg.bits());
                     }
                 }
                 Inst::Push(Arg::Reg(reg)) => {
                     if reg.is_hi() {
-                        bytes.extend_from_slice_unchecked(&[0x41, 0x50 | reg.base_bits()]);
+                        encoder.write_bytes(&[0x41, 0x50 | reg.base_bits()]);
                     } else {
-                        bytes.push_unchecked(0x50 | reg.bits());
+                        encoder.write_u8(0x50 | reg.bits());
                     }
                 }
                 Inst::Ret => {
-                    bytes.push_unchecked(0xC3);
+                    encoder.write_u8(0xC3);
                 }
                 Inst::Syscall => {
-                    bytes.extend_from_slice_unchecked(&[0x0F, 0x05]);
+                    encoder.write_bytes(&[0x0F, 0x05]);
                 }
                 _ => unreachable!(),
             }
         }
 
-        bytes
+        encoder.into_vec()
     }
 
     /// Returns the relative address if present in this instruction.
