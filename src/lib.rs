@@ -128,6 +128,16 @@ impl Inst {
         bytes
     }
 
+    /// Returns the relative address if present in this instruction.
+    #[inline]
+    pub const fn rel_addr(&self) -> Option<isize> {
+        let rel = match self {
+            Inst::Call(rel) | Inst::Jmp(rel) => rel,
+            _ => return None,
+        };
+
+        Some(*rel as isize)
+    }
     /// obtains the length of the instruction (max 15)
     #[inline]
     pub const fn len(&self) -> usize {
@@ -166,12 +176,27 @@ pub struct WithIp {
 
 impl WithIp {
     #[inline]
-    pub const fn ip(&self) -> usize {
+    pub const fn new(ip: usize, inst: Inst) -> Self {
+        Self { ip, inst }
+    }
+
+    /// Resolves the relative address (if present)
+    #[inline]
+    pub const fn abs_addr(self) -> Option<usize> {
+        // relative addresses are calculated from the ip after the current instruction.
+        let ip = self.ip + self.inst.len();
+        let addr = ip as isize + self.inst.rel_addr()?;
+
+        Some(addr as usize)
+    }
+
+    #[inline]
+    pub const fn ip(self) -> usize {
         self.ip
     }
 
     #[inline]
-    pub const fn display(&self) -> Inst {
+    pub const fn display(self) -> Inst {
         self.inst
     }
 }
@@ -214,7 +239,7 @@ impl<'a> Iterator for InstIter<'a> {
 
                 self.offset += inst.len();
 
-                Some(WithIp { ip, inst })
+                Some(WithIp::new(ip, inst))
             }
             None => None,
         }
